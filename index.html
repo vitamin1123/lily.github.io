@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>亲爱的朋友早上好</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="main.css">
+	</head>
+	<body>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "./build/three.module.js",
+					"three/addons/": "./jsm/",
+					"OrbitControls": "./jsm/controls/OrbitControls.js"
+				}
+			}
+		</script>
+
+		<script type="module">
+
+			import * as THREE from 'three';
+			import { OrbitControls } from 'OrbitControls';
+			let camera, scene, renderer;
+			let controls;
+			let mesh = [];
+			const AMOUNT = 1;
+			const encoder = new TextEncoder("gbk")
+			var xhr = new XMLHttpRequest();
+			var reader = new FileReader();
+			const array16x16 = []; 
+
+			var ws = new WebSocket("ws://127.0.0.1:8010/ws/3");
+			for (let i = 0; i < 16; i++) {  
+					
+				array16x16[i] = [];  
+				for (let j = 0; j < 16; j++) {  
+					array16x16[i][j] = 0;  
+					
+				}  
+			} 
+
+
+			init();
+			animate();
+			
+			
+			const ranges = [
+				[0xA1, 0xA9,  0xA1, 0xFE],
+				[0xB0, 0xF7,  0xA1, 0xFE],
+				[0x81, 0xA0,  0x40, 0xFE],
+				[0xAA, 0xFE,  0x40, 0xA0],
+				[0xA8, 0xA9,  0x40, 0xA0],
+				[0xAA, 0xAF,  0xA1, 0xFE],
+				[0xF8, 0xFE,  0xA1, 0xFE],
+				[0xA1, 0xA7,  0x40, 0xA0],
+			]
+			const codes = new Uint16Array(23940)
+			let i = 0
+
+			
+			for (const [b1Begin, b1End, b2Begin, b2End] of ranges) {
+				for (let b2 = b2Begin; b2 <= b2End; b2++) {
+					if (b2 !== 0x7F) {
+					for (let b1 = b1Begin; b1 <= b1End; b1++) {
+						codes[i++] = b2 << 8 | b1
+					}
+					}
+				}
+			}
+
+			const str = new TextDecoder('gbk').decode(codes)
+
+				
+			const table = new Uint16Array(65536)
+
+			for (let i = 0; i < str.length; i++) {
+				table[str.charCodeAt(i)] = codes[i]
+			}
+			const cong_str = ['早','安','顾','莉']
+			
+			
+				for(let i=0;i< 400000;i++) {
+				//hzPrint(cong_str[i])
+					setTimeout(()=> {
+						hzPrint(cong_str[i%4])
+						//console.log('i到那儿了:',i)
+					},4000*i);
+				//setTimeout(hzPrint, 3000, cong_str[i] )
+				}
+			
+			
+			//hzPrint('好');
+			function stringToGbk(str) {
+				const buf = new Uint8Array(str.length * 2)
+				let n = 0
+
+				for (let i = 0; i < str.length; i++) {
+					const code = str.charCodeAt(i)
+					if (code < 0x80) {
+					buf[n++] = code
+					} else {
+					const gbk = table[code]
+					buf[n++] = gbk & 0xFF
+					buf[n++] = gbk >> 8
+					}
+				}
+				return buf.subarray(0, n)
+			}
+
+			function hzkOffset(hz) {  
+				
+				const buffer1 = stringToGbk(hz);
+				
+				const q = buffer1[0]; 
+				const w = buffer1[1]; 
+				//console.log('buffer1:',buffer1,q,w) 
+				
+				return ((q - 161) * 94 + w - 161) * 32;  
+			}  
+
+			function fetchDataWithXHR(url) {  
+				//console.log("fetchDataWithXHR")
+				return new Promise((resolve, reject) => {  
+					const xhr = new XMLHttpRequest();  
+					xhr.open('GET', url, true); 
+					xhr.responseType = 'blob'; 
+					xhr.onload = function() {  
+					if (xhr.status === 200) {  
+						resolve(xhr.response); 
+					} else {  
+						reject(new Error(`Request failed.  Returned status of ${xhr.status}`));  
+					}  
+					};  
+					xhr.onerror = function() {  
+					reject(new Error('Network Error'));  
+					};  
+					xhr.send();  
+				});  
+			} 
+
+			function readFileAsArrayBuffer(file) {  
+					return new Promise((resolve, reject) => {  
+						const reader = new FileReader();  
+						reader.onload = function() {  
+							resolve(reader.result);  
+						};  
+						reader.onerror = function() {  
+							reject(reader.error);  
+						};  
+						reader.readAsArrayBuffer(file);  
+					});  
+			}
+
+			async function hzBuffer(hzstr) {  
+				const buffers = [];
+				const filePath = '.\\hzk16s';  
+				
+					try {  
+						
+						const fileContent = await fetchDataWithXHR(filePath);  
+						for (let z of hzstr) { 
+							const offset = hzkOffset(z);
+							//console.log('偏移量',offset);
+							var result1 = await readFileAsArrayBuffer(fileContent);
+							//reader.readAsArrayBuffer(fileContent)
+							
+								
+							var buff2 = result1.slice(offset,offset+32)
+							//console.log('result:',buff2 )
+								
+							buffers.push(buff2)
+								 
+							
+							
+						}  
+					} catch (error) {  
+						console.error('Error fetching data:', error);  
+					}  
+				 
+					return buffers;
+				
+				
+				 
+			} 
+			
+			async function hzPrint(hzstr) {  
+				for(var i=0;i<16;i++) {
+					for(var j=0;j<16;j++) {
+						//mesh[i*16+j].material.color.set(0xffdfd4);
+						mesh[i*16+j].position.z = 1
+					}
+				}
+				const buffers = await hzBuffer(hzstr);  
+				//console.log('buffers:',buffers,typeof(buffers))
+				for (let buffer of buffers) { 
+					const int8View = new Int8Array(buffer)
+					//console.log('buffers里的buffer:',buffer) 
+					for (let y = 0; y < 16; y++) {  
+						for (let x = 0; x < 16; x++) {  
+							const bitIndex = (y * 2) + Math.floor(x / 8);  
+							const bitMask = Array.from({length: 8}, (_, index) => Math.pow(2, (7-index))); 
+							//console.log("bitIndex",int8View[bitIndex]);
+							if ((int8View[bitIndex] & bitMask[x%8]) !== 0) {  
+								array16x16[y][x] = 1;
+								//console.log(".");  
+							} else {  
+								array16x16[y][x] = 0;
+								//console.log(" ");  
+							}  
+			
+							if (x === 15) {  
+								//console.log("\n");  
+							}  
+						}  
+					}  
+					//console.log("\n");  
+				} 
+				//console.log("16*16: ",array16x16) 
+			} 
+			
+			function init() {
+
+				const ASPECT_RATIO = window.innerWidth / window.innerHeight;
+
+				const WIDTH = ( window.innerWidth / AMOUNT ) * window.devicePixelRatio;
+				const HEIGHT = ( window.innerHeight / AMOUNT ) * window.devicePixelRatio;
+
+				
+
+				camera = new THREE.PerspectiveCamera( 40, ASPECT_RATIO, 0.1, 10 );
+				camera.viewport = new THREE.Vector4( Math.floor( 0 ), Math.floor( 0 ), Math.ceil( WIDTH ), Math.ceil( HEIGHT ) );
+				camera.position.x = -0.5;
+				camera.position.y = -0.5;
+				camera.position.z = 2.5;
+				camera.position.multiplyScalar( 2 );
+				camera.lookAt( 0, 0, 0 );
+				camera.updateMatrixWorld();
+				
+
+				scene = new THREE.Scene();
+				// var axesHelper = new THREE.AxesHelper(5); // 参数是坐标轴的长度  
+				// scene.add(axesHelper);  
+				scene.add( new THREE.AmbientLight( 0x999999 ) );
+
+				const light = new THREE.DirectionalLight( 0xffffff, 3 );
+				light.position.set( 2, 2, 3 );
+				light.castShadow = true;
+				light.shadow.camera.zoom = 4; // tighter shadow map
+				scene.add( light );
+
+				const geometryBackground = new THREE.PlaneGeometry( 100, 100 );
+				const materialBackground = new THREE.MeshPhongMaterial( { color: 0x000066 } );
+
+				const background = new THREE.Mesh( geometryBackground, materialBackground );
+				background.receiveShadow = true;
+				background.position.set( 0, 0, -1 );
+				scene.add( background );
+
+				for(var i =-8;i<8;i++) {
+					for(var j = 7;j>=-8;j--) {
+						const geometryCylinder = new THREE.BoxGeometry( 0.1, 0.1, 0.1 );
+						const materialCylinder = new THREE.MeshPhongMaterial( { color: 0xffdfd4 } );
+						var mesh_tp = new THREE.Mesh( geometryCylinder, materialCylinder );
+						mesh_tp.castShadow = true;
+						mesh_tp.receiveShadow = true;
+						mesh_tp.position.set(i/10,j/10,1)
+						scene.add( mesh_tp );
+						mesh.push(mesh_tp)
+					}
+				}
+				
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.shadowMap.enabled = true;
+				controls = new OrbitControls( camera, renderer.domElement );
+				controls.update();
+				document.body.appendChild( renderer.domElement );
+				window.addEventListener( 'resize', onWindowResize );
+
+			}
+
+			function onWindowResize() {
+
+				const ASPECT_RATIO = window.innerWidth / window.innerHeight;
+				const WIDTH = ( window.innerWidth / AMOUNT ) * window.devicePixelRatio;
+				const HEIGHT = ( window.innerHeight / AMOUNT ) * window.devicePixelRatio;
+
+				camera.aspect = ASPECT_RATIO;
+				camera.updateProjectionMatrix();
+				camera.viewport.set(
+							Math.floor(  WIDTH ),
+							Math.floor(  HEIGHT ),
+							Math.ceil( WIDTH ),
+							Math.ceil( HEIGHT ) );
+				
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			
+			
+			var flag = true;
+			var pos_x = camera.position.x;
+			var pos_y = camera.position.y;
+			var pos_z = camera.position.z;
+			var tar_x = controls.target.x;
+			var tar_y = controls.target.y;
+			var tar_z = controls.target.z;
+
+			ws.onmessage = function(event) {
+				console.log("event_data: ",typeof(event.data),event.data)
+				var ed_json = JSON.parse(event.data)
+				if ("pos_data" in ed_json) {
+					camera.position.x = ed_json["pos_data"]["pos_x"]
+					camera.position.y = ed_json["pos_data"]["pos_y"]
+					camera.position.z = ed_json["pos_data"]["pos_z"]
+				}
+				if ("tar_data" in ed_json) {
+					controls.target.x = ed_json["tar_data"]["tar_x"]
+					controls.target.y = ed_json["tar_data"]["tar_y"]
+					controls.target.z = ed_json["tar_data"]["tar_z"]
+				}
+			};
+
+			function sendMessage(x) {
+				console.log("调用了sendMessage",x)
+				if (ws.readyState===1) {
+					ws.send(x)
+				}
+				
+				
+			}
+
+			function animate() {
+				if(Math.abs(pos_x - camera.position.x) <= Number.EPSILON && Math.abs(pos_y - camera.position.y) <= Number.EPSILON && Math.abs(pos_z - camera.position.z) <= Number.EPSILON){
+
+				}else{
+					pos_x = camera.position.x;
+					pos_y = camera.position.y;
+					pos_z = camera.position.z;
+					let message = {"username":"xyy_3","pos_data": {"pos_x":pos_x,"pos_y":pos_y,"pos_z":pos_z}};
+        			let messageJson = JSON.stringify(message);
+					sendMessage(messageJson)
+					console.log('camera.position', camera.position.x,camera.position.y,camera.position.z);
+				}
+				if(Math.abs(tar_x - controls.target.x) <= Number.EPSILON && Math.abs(tar_y - controls.target.y) <= Number.EPSILON && Math.abs(tar_z - controls.target.z) <= Number.EPSILON){
+
+				}else{
+					tar_x = controls.target.x;
+					tar_y = controls.target.y;
+					tar_z = controls.target.z;
+					let message = {"username":"xyy_3","tar_data": {"tar_x":tar_x,"tar_y":tar_y,"tar_z":tar_z}};
+        			let messageJson = JSON.stringify(message);
+					sendMessage(messageJson)
+					console.log('controls.target', controls.target.x,controls.target.y,controls.target.z);
+				}
+				
+				//console.log('controls.target', controls.target);
+				for(var i=0;i<16;i++) {
+					for(var j=0;j<16;j++) {
+						if(array16x16[j][i] == 1) {
+							var mesh_tp = mesh[i*16+j]
+							let p = mesh_tp.position.z;
+							if (p > 1.1){
+							
+								flag = false;
+							} else if(p < 1){
+								flag = true;
+							}
+
+							if(flag){
+								mesh_tp.translateZ(0.0008); // 沿着Z轴将平移 1 个单位。
+							}else {
+								mesh_tp.translateZ(-0.0008);
+							}
+
+							//mesh_tp.material.color.set(0xff6a6a);
+							//mesh[i*16+j].position.z = (0.1/60);
+							//console.log('位置:', i*16+j , mesh[i*16+j].position.z);
+							// if (mesh[i*16+j].position.z > 1.1) {
+							// 	mesh[i*16+j].position.z -= (0.1/60)
+							// }
+							// else if (mesh[i*16+j].position.z < 0.9){
+							// 	mesh[i*16+j].position.z += (0.1/60)
+							// }
+							
+						}
+					}
+				}
+				
+				controls.update();
+				renderer.render( scene, camera );
+				requestAnimationFrame( animate );
+
+			}
+
+		</script>
+
+	</body>
+</html>
